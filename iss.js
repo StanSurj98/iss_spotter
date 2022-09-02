@@ -46,5 +46,53 @@ const fetchCoordsByIP = (ip, cb) => {
   });
 };
 
+// request for the simulation API
+const fetchISSFlyOverTimes = (coords, cb) => {
+  const url = `https://iss-pass.herokuapp.com/json/?lat=${coords.latitude}&lon=${coords.longitude}`;
+  request(url, (error, status, body) => {
+    // our 2 guard clauses
+    if (error) return cb(error, null);
+    if (status.statusCode !== 200) return cb(`status: ${status && status.statusCode}`, null);
 
-module.exports = { fetchMyIP, fetchCoordsByIP };
+    // if all well, parse the body to object
+    const parsedBody = JSON.parse(body);
+    // destructure the response object
+    const { response } = parsedBody;
+    // pass back the response object to the callback in index.js
+    cb(null, response);
+  });
+};
+
+// FINALLY, lets chain all these callback APIs together...
+/**
+ * Orchestrates multiple API requests in order to determine the next 5 upcoming ISS fly overs for the user's current location.
+ * Input:
+ *   - A callback with an error or results. 
+ * Returns (via Callback):
+ *   - An error, if any (nullable)
+ *   - The fly-over times as an array (null if error):
+ *     [ { risetime: <number>, duration: <number> }, ... ]
+ */ 
+const nextISStimesForMyLocation = (cb) => {
+  // first we pass in our fetchMyIP() func
+  fetchMyIP((error, ip) => {
+    // 1. always check for errors, since we know our cb takes errors first arg
+    if (error) return cb(error, null);
+
+    // 2. if we get an ip, lets pass back into it, our fetch coords take (ip, cb(err, coords))
+    fetchCoordsByIP(ip, (error, coords) => {
+      // 3. check again for errors... if we get one, pass to main cb in index.js, null data
+      if (error) return cb(error, null);
+
+      // 4. if we get coords, pass it into 3rd func, fetchFlytimes...(coords, cb(err, data))
+      fetchISSFlyOverTimes(coords, (error, data) => {
+        if (error) return cb(error, null);
+
+        // 5. FINALLY => if no errors, nullify it and pass the data to the main callback
+        cb(null, data);
+      });
+    });
+  });
+};
+
+module.exports = { nextISStimesForMyLocation };
